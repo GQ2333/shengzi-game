@@ -7,6 +7,10 @@
 <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@2.2/dist/hanzi-writer.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/lxgwwenkai-regular.css">
 <style>
+  @font-face {
+    font-family: 'GameKaiTi';
+    src: local('Kaiti SC'), local('楷体-简'), local('楷体'), local('KaiTi'), local('STKaiti'), local('Kai');
+  }
   /* ========== 全局 ========== */
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -465,7 +469,7 @@
       <!-- HanziWriter 动画层（只用于笔画动画） -->
       <div id="hz-container" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:2;"></div>
       <!-- 静态楷体字（透明，叠加在田字格上） -->
-      <div id="hz-static" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-family:'LXGW WenKai','Kaiti SC','STKaiti','KaiTi','楷体',serif;font-size:110px;font-weight:400;color:#2c1810;z-index:3;pointer-events:none;transition:opacity 0.15s;"></div>
+      <div id="hz-static" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-family:'GameKaiTi','LXGW WenKai','Kaiti SC','STKaiti','KaiTi','楷体',serif;font-size:110px;font-weight:400;color:#2c1810;z-index:3;pointer-events:none;transition:opacity 0.15s;"></div>
     </div>
     <div class="stroke-controls">
       <button class="btn-stroke" id="btnStroke" onclick="toggleStrokeAnim()">✍️ 笔画顺序</button>
