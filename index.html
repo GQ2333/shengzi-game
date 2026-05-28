@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>🦐 小钳仙 · 生字闯关</title>
+<script src="https://cdn.jsdelivr.net/npm/hanzi-writer@2.4/dist/hanzi-writer.min.js"></script>
 <style>
   /* ========== 全局 ========== */
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -367,6 +368,142 @@
     .header h1 { font-size: 18px; }
     .resume-overlay .progress-mini { width: 180px; }
   }
+/* ========== 田字格 ========== */
+.char-canvas {
+  width: 200px;
+  height: 200px;
+  margin: 0 auto;
+  position: relative;
+}
+.char-canvas svg {
+  width: 100% !important;
+  height: 100% !important;
+}
+.char-canvas-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+/* ========== 单元选择 ========== */
+.unit-picker-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: #fffef7;
+  border-radius: 32px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  padding: 30px 24px;
+  overflow-y: auto;
+}
+.unit-picker-overlay.hidden {
+  display: none;
+}
+.unit-picker-overlay h2 {
+  text-align: center;
+  color: #a04000;
+  font-size: 20px;
+  margin-bottom: 4px;
+}
+.unit-picker-overlay .sub {
+  text-align: center;
+  color: #b9770e;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+.unit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+.unit-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #fdf2e9;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+.unit-item:hover {
+  background: #fae5d3;
+}
+.unit-item.selected {
+  border-color: #e67e22;
+  background: #fef5e7;
+}
+.unit-item .checkbox {
+  width: 22px; height: 22px;
+  border-radius: 4px;
+  border: 2px solid #b9770e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #fff;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+.unit-item.selected .checkbox {
+  background: #e67e22;
+  border-color: #e67e22;
+}
+.unit-item .unit-name {
+  flex: 1;
+  font-weight: 600;
+  color: #6e2c00;
+  font-size: 15px;
+}
+.unit-item .unit-count {
+  color: #b9770e;
+  font-size: 13px;
+}
+.unit-item.select-all {
+  background: #fef9e7;
+  border-color: #f39c12;
+  font-weight: 700;
+}
+.unit-item.select-all .unit-name {
+  color: #d35400;
+}
+.btn-start {
+  display: block;
+  width: 100%;
+  padding: 14px;
+  font-size: 18px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #e67e22, #d35400);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+  margin-top: 12px;
+  transition: opacity 0.2s;
+}
+.btn-start:hover { opacity: 0.9; }
+.btn-start:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ========== 笔画动画按钮 ========== */
+.stroke-btn-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+.stroke-btn-row .btn {
+  font-size: 12px;
+  padding: 4px 12px;
+}
+
 </style>
 </head>
 <body>
@@ -400,8 +537,14 @@
 
   <!-- ====== 卡片 ====== -->
   <div class="card-zone" id="cardZone">
+    <div class="char-canvas-wrap">
+      <div class="char-canvas" id="charCanvas"></div>
+      <div class="stroke-btn-row">
+        <button class="btn btn-sm btn-pass" onclick="playStroke()" id="strokePlayBtn">✍️ 看笔画</button>
+        <button class="btn btn-sm btn-fail" onclick="showFullChar()" id="strokeShowBtn">📖 看全字</button>
+      </div>
+    </div>
     <div class="pinyin" id="pinyin"></div>
-    <div class="main-char" id="mainChar">春</div>
     <div class="words" id="words"></div>
     <div class="listen-status result-wait" id="listenStatus">🎤 点击麦克风按钮跟读</div>
     <div class="btn-row" id="btnRow">
@@ -440,7 +583,16 @@
     <div class="btn-row" style="margin-top:8px">
       <button class="btn btn-pass" onclick="resumeGame()">▶️ 继续闯关</button>
       <button class="btn btn-danger btn-sm" onclick="clearAndStart()">🆕 重新开始</button>
+      <button class="btn btn-sm" onclick="showUnitPicker()" style="background:#f0c9a3;color:#6e2c00">📚 选择其他单元</button>
     </div>
+  </div>
+
+  <!-- ====== 单元选择 ====== -->
+  <div class="unit-picker-overlay" id="unitPicker">
+    <h2>📚 选择学习单元</h2>
+    <div class="sub">一年级下册 · 可选全部或按单元学习</div>
+    <div class="unit-list" id="unitList"></div>
+    <button class="btn-start" id="btnStartGame" onclick="startGameWithUnits()">🚀 开始学习</button>
   </div>
 
   <!-- ====== 保存提示 ====== -->
@@ -784,6 +936,72 @@ const ALL_CHARS = [
 ];
 
 // ============================================================
+//  单元分组
+// ============================================================
+var UNIT_GROUPS = [];
+(function buildUnits() {
+  var unitDefs = [
+    { name: '识字 1-4', start: 0, count: 24 },
+    { name: '课文 1-4', start: 24, count: 25 },
+    { name: '课文 5-8', start: 49, count: 24 },
+    { name: '课文 9-12', start: 73, count: 15 },
+    { name: '课文 13-16', start: 88, count: 16 },
+    { name: '课文 17-20', start: 104, count: 19 },
+    { name: '课文 21-24', start: 123, count: 23 },
+    { name: '识字 5-8', start: 146, count: 12 },
+    { name: '课文 25-28', start: 158, count: 16 },
+  ];
+  for (var u = 0; u < unitDefs.length; u++) {
+    var def = unitDefs[u];
+    var chars = [];
+    for (var k = 0; k < def.count; k++) {
+      if (def.start + k < ALL_CHARS.length) {
+        chars.push(ALL_CHARS[def.start + k]);
+      }
+    }
+    UNIT_GROUPS.push({ name: def.name, chars: chars, selected: true });
+  }
+})();
+
+// ============================================================
+//  HanziWriter 管理
+// ============================================================
+var hwWriter = null;
+var hwCurrentChar = '';
+
+function initHanziWriter(charStr) {
+  var container = document.getElementById('charCanvas');
+  if (!container) return;
+  container.innerHTML = '';
+  hwCurrentChar = charStr;
+  try {
+    hwWriter = HanziWriter.create('charCanvas', charStr, {
+      width: 200,
+      height: 200,
+      padding: 5,
+      strokeColor: '#3e2723',
+      strokeAnimationDuration: 500,
+      delayBetweenStrokes: 120,
+      delayBetweenLoops: 1000,
+      radicalColor: null,
+      showOutline: true,
+      showCharacter: true,
+    });
+  } catch(e) {
+    container.innerHTML = '<div style="font-size:100px;text-align:center;color:#3e2723;padding-top:30px">' + charStr + '</div>';
+    hwWriter = null;
+  }
+}
+
+function playStroke() {
+  if (hwWriter) { hwWriter.animateCharacter(); }
+}
+
+function showFullChar() {
+  if (hwWriter) { hwWriter.showCharacter(); }
+}
+
+// ============================================================
 //  状态
 // ============================================================
 const STORAGE_KEY = 'shengzi_game_v1';
@@ -864,7 +1082,7 @@ function shuffle(arr) {
   return arr;
 }
 
-function initGame(fromSaved) {
+function initGame(fromSaved, unitChars) {
   if (!fromSaved) {
     state.passSet = new Set();
     state.failSet = new Set();
@@ -872,15 +1090,15 @@ function initGame(fromSaved) {
     state.isResult = false;
     state.mode = 'normal';
 
-    // 打乱顺序
-    state.chars = shuffle([...ALL_CHARS]);
+    // 使用选中的字
+    var sourceChars = unitChars || ALL_CHARS;
+    state.chars = shuffle([...sourceChars]);
     state.shuffledOrder = state.chars.map(c => ALL_CHARS.indexOf(c));
     state.shuffled = true;
     state.currentIndex = 0;
     state.autoListen = false;
     state._continueLearning = false;
 
-    // 清除之前的存档
     clearSavedState();
   }
   stopListen();
@@ -888,7 +1106,75 @@ function initGame(fromSaved) {
   document.getElementById('resultScreen').classList.remove('show');
   document.getElementById('cardZone').style.display = 'flex';
   document.getElementById('resumeOverlay').classList.remove('show');
+  document.getElementById('unitPicker').classList.add('hidden');
   render();
+}
+
+// ============================================================
+//  单元选择
+// ============================================================
+function renderUnitPicker() {
+  var listEl = document.getElementById('unitList');
+  if (!listEl) return;
+  var totalChars = 0;
+  UNIT_GROUPS.forEach(function(g) { totalChars += g.chars.length; });
+  var allSelected = UNIT_GROUPS.every(function(g) { return g.selected; });
+  var html = '';
+  // 全部选项
+  html += '<div class="unit-item select-all' + (allSelected ? ' selected' : '') + '" onclick="toggleAllUnits()">';
+  html += '  <div class="checkbox">' + (allSelected ? '\u2713' : '') + '</div>';
+  html += '  <div class="unit-name">\u5168\u90E8\u5B66\u4E60</div>';
+  html += '  <div class="unit-count">' + totalChars + ' \u4E2A\u5B57</div></div>';
+  // 每个单元
+  for (var i = 0; i < UNIT_GROUPS.length; i++) {
+    var g = UNIT_GROUPS[i];
+    html += '<div class="unit-item' + (g.selected ? ' selected' : '') + '" onclick="toggleUnit(' + i + ')">';
+    html += '  <div class="checkbox">' + (g.selected ? '\u2713' : '') + '</div>';
+    html += '  <div class="unit-name">' + g.name + '</div>';
+    html += '  <div class="unit-count">' + g.chars.length + ' \u4E2A\u5B57</div></div>';
+  }
+  listEl.innerHTML = html;
+  updateStartBtn();
+}
+
+function toggleAllUnits() {
+  var allSelected = UNIT_GROUPS.every(function(g) { return g.selected; });
+  var newVal = !allSelected;
+  UNIT_GROUPS.forEach(function(g) { g.selected = newVal; });
+  renderUnitPicker();
+}
+
+function toggleUnit(idx) {
+  UNIT_GROUPS[idx].selected = !UNIT_GROUPS[idx].selected;
+  renderUnitPicker();
+}
+
+function updateStartBtn() {
+  var btn = document.getElementById('btnStartGame');
+  if (!btn) return;
+  var anySelected = UNIT_GROUPS.some(function(g) { return g.selected; });
+  btn.disabled = !anySelected;
+  btn.textContent = anySelected ? '\uD83D\uDE80 \u5F00\u59CB\u5B66\u4E60' : '\u2705 \u8BF7\u9009\u62E9\u81F3\u5C11\u4E00\u4E2A\u5355\u5143';
+}
+
+function startGameWithUnits() {
+  var selected = [];
+  UNIT_GROUPS.forEach(function(g) {
+    if (g.selected) {
+      g.chars.forEach(function(c) { selected.push(c); });
+    }
+  });
+  if (selected.length === 0) return;
+  // 去重（防止单元间有重复字）
+  var seen = {};
+  var deduped = [];
+  for (var i = 0; i < selected.length; i++) {
+    if (!seen[selected[i].char]) {
+      seen[selected[i].char] = true;
+      deduped.push(selected[i]);
+    }
+  }
+  initGame(false, deduped);
 }
 
 function getOrderedChars() {
@@ -902,15 +1188,15 @@ function getOrderedChars() {
 function render() {
   const { chars, currentIndex, passSet, failSet, isResult } = state;
 
-  // 统计
+  // 统计（用当前学习队列的总数）
   document.getElementById('passCount').textContent = passSet.size;
   document.getElementById('failCount').textContent = failSet.size;
-  const leftTotal = ALL_CHARS.length;
+  var leftTotal = state.chars.length;
   document.getElementById('leftCount').textContent = leftTotal - passSet.size - failSet.size;
 
   // 进度条
-  const done = passSet.size + failSet.size;
-  const pct = leftTotal > 0 ? (done / leftTotal) * 100 : 100;
+  var done = passSet.size + failSet.size;
+  var pct = leftTotal > 0 ? (done / leftTotal) * 100 : 100;
   document.getElementById('progressBar').style.width = pct + '%';
   document.getElementById('progressText').textContent = `${done} / ${leftTotal}`;
 
@@ -930,8 +1216,8 @@ function render() {
     return;
   }
 
-  // 显示字
-  document.getElementById('mainChar').textContent = item.char;
+  // 显示字（田字格 + 笔画）
+  initHanziWriter(item.char);
   document.getElementById('pinyin').textContent = '';
   document.getElementById('words').textContent = '';
   state.hintVisible = false;
@@ -991,9 +1277,9 @@ function showResult() {
   document.getElementById('cardZone').style.display = 'none';
   document.getElementById('resumeOverlay').classList.remove('show');
 
-  const total = ALL_CHARS.length;
-  const pass = state.passSet.size;
-  const fail = state.failSet.size;
+  var total = state.chars.length || ALL_CHARS.length;
+  var pass = state.passSet.size;
+  var fail = state.failSet.size;
   var studied = pass + fail;
   var pct = studied > 0 ? Math.round((pass / studied) * 100) : 0;
 
@@ -1068,7 +1354,8 @@ function setMode(mode) {
 
     // 如果所有字都判完了但有不会的，直接变成继续学习不熟的字
     var totalDone = state.passSet.size + state.failSet.size;
-    if (totalDone >= ALL_CHARS.length && state.failSet.size > 0) {
+    var totalChars = state.chars.length || ALL_CHARS.length;
+    if (totalDone >= totalChars && state.failSet.size > 0) {
       var wrongList = Array.from(state.failSet);
       var wrongSet = new Set(wrongList);
       state.chars = shuffle(ALL_CHARS.filter(function(c) { return wrongSet.has(c.char); }));
@@ -1078,7 +1365,7 @@ function setMode(mode) {
     state.hintVisible = false;
     state.isResult = false;
     // 闯关模式对复习序列不跳过 failSet，让用户继续练
-    state._continueLearning = totalDone >= ALL_CHARS.length && state.failSet.size > 0;
+    state._continueLearning = totalDone >= (state.chars.length || ALL_CHARS.length) && state.failSet.size > 0;
     document.getElementById('resultScreen').classList.remove('show');
     document.getElementById('cardZone').style.display = 'flex';
     autoSave();
@@ -1088,7 +1375,9 @@ function setMode(mode) {
 
 function restartAll() {
   if (!confirm('确定要重新开始吗？之前的成绩会清零。')) return;
-  initGame(false);
+  document.getElementById('resultScreen').classList.remove('show');
+  document.getElementById('unitPicker').classList.remove('hidden');
+  renderUnitPicker();
 }
 
 function reviewWrong() {
@@ -1336,7 +1625,7 @@ function renderFresh(idx) {
   var chars = state.chars;
   var passCount = state.passSet.size;
   var failCount = state.failSet.size;
-  var total = ALL_CHARS.length;
+  var total = state.chars.length || ALL_CHARS.length;
 
   document.getElementById('passCount').textContent = passCount;
   document.getElementById('failCount').textContent = failCount;
@@ -1426,43 +1715,50 @@ function resumeGame() {
   render();
 }
 
+function showUnitPicker() {
+  document.getElementById('resumeOverlay').classList.remove('show');
+  document.getElementById('resultScreen').classList.remove('show');
+  document.getElementById('unitPicker').classList.remove('hidden');
+  renderUnitPicker();
+}
+
 function clearAndStart() {
   if (!confirm('确定要重新开始吗？上次的成绩会被清除。')) return;
-  initGame(false);
+  document.getElementById('resumeOverlay').classList.remove('show');
+  document.getElementById('unitPicker').classList.remove('hidden');
+  renderUnitPicker();
 }
 
 // ============================================================
 function checkSavedData() {
   const saved = loadSavedState();
-  if (!saved) {
-    initGame(false);
+  if (saved) {
+    const pass = (saved.passList || []).length;
+    const fail = (saved.failList || []).length;
+    const total = ALL_CHARS.length;
+    const done = pass + fail;
+
+    document.getElementById('resumeInfo').innerHTML =
+      `你已经认识了 <strong>${pass}</strong> 个字，` +
+      `还有 <strong>${fail}</strong> 个不会`;
+
+    document.getElementById('resumeProgressFill').style.width =
+      total > 0 ? (done / total * 100) + '%' : '0%';
+
+    if (done >= total) {
+      state.passSet = new Set(saved.passList || []);
+      state.failSet = new Set(saved.failList || []);
+      state.chars = [];
+      state.currentIndex = 0;
+      showResult();
+      return;
+    }
+
+    document.getElementById('resumeOverlay').classList.add('show');
     return;
   }
-
-  const pass = (saved.passList || []).length;
-  const fail = (saved.failList || []).length;
-  const total = ALL_CHARS.length;
-  const done = pass + fail;
-
-  document.getElementById('resumeInfo').innerHTML =
-    `你已经认识了 <strong>${pass}</strong> 个字，` +
-    `还有 <strong>${fail}</strong> 个不会`;
-
-  document.getElementById('resumeProgressFill').style.width =
-    total > 0 ? (done / total * 100) + '%' : '0%';
-
-  // 如果是结算页（全部完成），直接跳到结果
-  if (done >= total) {
-    // 恢复状态再看结果
-    state.passSet = new Set(saved.passList || []);
-    state.failSet = new Set(saved.failList || []);
-    state.chars = [];
-    state.currentIndex = 0;
-    showResult();
-    return;
-  }
-
-  document.getElementById('resumeOverlay').classList.add('show');
+  // 无存档 → 显示单元选择
+  renderUnitPicker();
 }
 
 // ============================================================
