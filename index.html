@@ -1067,16 +1067,6 @@ function initGame(fromSaved) {
 }
 
 // ============================================================
-//  单元选择
-// ============================================================
-function getOrderedChars() {
-  // 从 localStorage 恢复时，用保存的顺序
-  if (state.shuffledOrder && state.shuffledOrder.length > 0) {
-    return state.shuffledOrder.map(i => ALL_CHARS[i]).filter(Boolean);
-  }
-  return shuffle([...ALL_CHARS]);
-}
-
 function render() {
   const { chars, passSet, failSet, isResult } = state;
 
@@ -1177,9 +1167,7 @@ function showHint() {
 function showResult() {
   state.isResult = true;
   document.getElementById('cardZone').style.display = 'none';
-  var ro = document.getElementById('resumeOverlay'); if (ro) ro.classList.remove('show');
 
-  var total = state.chars.length || ALL_CHARS.length;
   var pass = state.passSet.size;
   var fail = state.failSet.size;
   var studied = pass + fail;
@@ -1216,8 +1204,7 @@ function showResult() {
   state.autoListen = false;
   state._continueLearning = false;
 
-  // 通关后清除存档（以示庆祝）
-  clearSavedState();
+  autoSave();
 }
 
 function setMode(mode) {
@@ -1264,26 +1251,11 @@ function restartAll() {
 }
 
 function reviewWrong() {
-  stopListen();
-  state.autoListen = false;
-  const wrongArr = Array.from(state.failSet);
-  if (wrongArr.length === 0) {
+  if (state.failSet.size === 0) {
     alert('🎉 没有错字！');
     return;
   }
-  state.mode = 'review';
-  const wrongChars = new Set(wrongArr);
-  state.chars = shuffle(ALL_CHARS.filter(c => wrongChars.has(c.char)));
-  state.shuffledOrder = state.chars.map(c => ALL_CHARS.indexOf(c));
-  state.currentIndex = 0;
-  state.hintVisible = false;
-  state.isResult = false;
-  document.getElementById('resultScreen').classList.remove('show');
-  document.getElementById('cardZone').style.display = 'flex';
-  document.querySelectorAll('.mode-toggle .btn').forEach(b => b.classList.remove('active'));
-  document.querySelector('.mode-toggle .btn[data-mode="review"]').classList.add('active');
-  autoSave();
-  render();
+  setMode('review');
 }
 
 // ============================================================
@@ -1700,16 +1672,23 @@ function resumeGame() {
   state.passSet = new Set(saved.passList || []);
   state.failSet = new Set(saved.failList || []);
   state.mode = saved.mode || 'normal';
-  state.currentIndex = saved.currentIndex || 0;
   state.hintVisible = false;
   state.isResult = false;
   state.autoListen = false;
-  // 用全新打乱，避免保存时的复习队列污染
-  state.chars = shuffle([...ALL_CHARS]);
-  state.shuffledOrder = state.chars.map(function(c) { return ALL_CHARS.indexOf(c); });
+
+  // ★ 恢复保存的字序，不打乱
+  if (saved.shuffledOrder && saved.shuffledOrder.length > 0) {
+    state.chars = saved.shuffledOrder.map(function(i) { return ALL_CHARS[i]; }).filter(Boolean);
+    state.shuffledOrder = saved.shuffledOrder;
+  } else {
+    state.chars = shuffle([].concat(ALL_CHARS));
+    state.shuffledOrder = state.chars.map(function(c) { return ALL_CHARS.indexOf(c); });
+  }
+  state.currentIndex = saved.currentIndex || 0;
+
   document.querySelectorAll('.mode-toggle .btn').forEach(function(b) { b.classList.remove('active'); });
-  document.querySelector('.mode-toggle .btn[data-mode="' + state.mode + '"]').classList.add('active');
-  var ro = document.getElementById('resumeOverlay'); if (ro) ro.classList.remove('show');
+  var modeBtn = document.querySelector('.mode-toggle .btn[data-mode="' + state.mode + '"]');
+  if (modeBtn) modeBtn.classList.add('active');
   document.getElementById('cardZone').style.display = 'flex';
   render();
 }
