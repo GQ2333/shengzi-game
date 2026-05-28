@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>🦐 小钳仙 · 生字闯关</title>
+<script src="https://cdn.jsdelivr.net/npm/hanzi-writer@2.2/dist/hanzi-writer.min.js"></script>
 <style>
   /* ========== 全局 ========== */
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -369,30 +370,56 @@
   }
 
 
-/* ========== 田字格 ========== */
-#tianzige {
+/* ========== Hanzi Writer 双层显示 ========== */
+#hz-wrapper {
   position: relative;
   width: 200px;
   height: 200px;
   margin: 0 auto 12px;
 }
-#tianzige svg {
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%;
-  height: 100%;
+#hz-static {
+  transition: opacity 0.15s;
 }
-#tianzige .char-text {
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
+#hz-static.hidden {
+  opacity: 0;
+}
+#hz-container {
+  pointer-events: none;
+}
+.stroke-controls {
   display: flex;
-  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
   justify-content: center;
-  font-size: 120px;
-  font-weight: 700;
-  color: #3e2723;
-  z-index: 2;
-  user-select: none;
+  align-items: center;
+}
+.stroke-controls .btn-stroke {
+  padding: 6px 14px;
+  font-size: 13px;
+  border-radius: 20px;
+  border: 1.5px solid #d35400;
+  background: #fff;
+  color: #d35400;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+.stroke-controls .btn-stroke:hover {
+  background: #d35400;
+  color: #fff;
+}
+.stroke-controls .btn-stroke.active {
+  background: #d35400;
+  color: #fff;
+}
+.stroke-controls .btn-stroke:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.stroke-info {
+  font-size: 12px;
+  color: #a04000;
+  font-weight: 600;
 }
 
 </style>
@@ -428,7 +455,14 @@
 
   <!-- ====== 卡片 ====== -->
   <div class="card-zone" id="cardZone">
-    <div class="tianzige" id="tianzige"></div>
+    <div id="hz-wrapper" style="position:relative;width:200px;height:200px;margin:0 auto 12px;">
+      <div id="hz-static" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:100px;font-weight:700;color:#3e2723;border:2px solid #f0c9a3;border-radius:12px;background:#fffef7;z-index:2;pointer-events:none;"></div>
+      <div id="hz-container" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;"></div>
+    </div>
+    <div class="stroke-controls">
+      <button class="btn-stroke" id="btnStroke" onclick="toggleStrokeAnim()">✍️ 笔画顺序</button>
+      <span class="stroke-info" id="strokeInfo"></span>
+    </div>
     <div class="pinyin" id="pinyin"></div>
     <div class="words" id="words"></div>
     <div class="listen-status result-wait" id="listenStatus">🎤 点击麦克风按钮跟读</div>
@@ -463,6 +497,10 @@
 </div>
 
 <script>
+// ============================================================
+//  生字闯关 v2 — 小钳仙
+//  修复: 语法错误、语音识别事件绑定、递归栈溢出
+//  新增: 键盘快捷键、流程优化
 // ============================================================
 //  生字库  —  人教版一年级下册（约 250 字）
 // ============================================================
@@ -798,21 +836,112 @@ const ALL_CHARS = [
 ];
 
 // ============================================================
-//  田字格渲染
+//  Hanzi Writer — 笔画顺序动画（静态显示 + 动画叠加）
 // ============================================================
-function renderTianzige(charStr) {
-  var container = document.getElementById('tianzige');
-  if (!container) return;
-  var html = '';
-  html += '<svg viewBox="0 0 200 200" style="position:absolute;top:0;left:0;width:100%;height:100%">';
-  html += '<rect x="0" y="0" width="200" height="200" fill="#fffef7" stroke="#ccc" stroke-width="1.5"/>';
-  html += '<line x1="100" y1="0" x2="100" y2="200" stroke="#bbb" stroke-width="0.8" stroke-dasharray="4,4"/>';
-  html += '<line x1="0" y1="100" x2="200" y2="100" stroke="#bbb" stroke-width="0.8" stroke-dasharray="4,4"/>';
-  html += '<line x1="0" y1="0" x2="200" y2="200" stroke="#ddd" stroke-width="0.5" stroke-dasharray="3,3"/>';
-  html += '<line x1="200" y1="0" x2="0" y2="200" stroke="#ddd" stroke-width="0.5" stroke-dasharray="3,3"/>';
-  html += '</svg>';
-  html += '<span class="char-text">' + charStr + '</span>';
-  container.innerHTML = html;
+let hzWriter = null;
+let hzAnimating = false;
+let hzDataReady = false;
+
+function initWriter(charStr) {
+  // ★ 静态大字始终显示
+  var staticEl = document.getElementById('hz-static');
+  if (staticEl) {
+    staticEl.textContent = charStr;
+    staticEl.classList.remove('hidden');
+  }
+
+  // 重置动画状态
+  hzAnimating = false;
+  hzDataReady = false;
+  var btn = document.getElementById('btnStroke');
+  btn.textContent = '✍️ 笔画顺序';
+  btn.classList.remove('active');
+  btn.disabled = true;
+  document.getElementById('strokeInfo').textContent = '';
+
+  // 清理旧 HanziWriter 实例和 DOM 残留
+  if (hzWriter) { hzWriter = null; }
+  var hzCont = document.getElementById('hz-container');
+  if (hzCont) { hzCont.innerHTML = ''; }
+
+  // 库未加载 → 按钮不可用
+  if (typeof HanziWriter === 'undefined') {
+    btn.textContent = '⚠️ 正在加载...';
+    return;
+  }
+
+  // 创建 HanziWriter（在静态层下方加载笔画数据）
+  try {
+    hzWriter = HanziWriter.create('hz-container', charStr, {
+      width: 200,
+      height: 200,
+      padding: 5,
+      strokeAnimationSpeed: 1.2,
+      delayBetweenStrokes: 600,
+      strokeColor: '#333',
+      radicalColor: '#d35400',
+      outlineColor: '#ddd',
+      showCharacter: true,
+      showOutline: true,
+      charDataLoader: function(ch, onComplete) {
+        fetch('https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0/' + encodeURIComponent(ch) + '.json')
+          .then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+          })
+          .then(function(data) { onComplete(data); })
+          .catch(function(err) {
+            console.warn('HW: no stroke data for ' + ch, err);
+            onComplete(null);
+          });
+      },
+      onLoadCharDataSuccess: function() {
+        hzDataReady = true;
+        document.getElementById('btnStroke').disabled = false;
+      },
+      onLoadCharDataError: function(ch) {
+        console.warn('HW: data error for ' + ch);
+        document.getElementById('btnStroke').disabled = true;
+        document.getElementById('btnStroke').textContent = '🚫 无笔画数据';
+      }
+    });
+  } catch(e) {
+    console.warn('HW create error:', e);
+    btn.disabled = true;
+  }
+}
+
+function toggleStrokeAnim() {
+  if (!hzWriter || !hzDataReady) return;
+
+  if (hzAnimating) {
+    // 停止
+    try { hzWriter.stopAnimation(); } catch(e) {}
+    hzAnimating = false;
+    document.getElementById('btnStroke').textContent = '✍️ 笔画顺序';
+    document.getElementById('btnStroke').classList.remove('active');
+    document.getElementById('hz-static').classList.remove('hidden');
+    return;
+  }
+
+  // 开始动画
+  hzAnimating = true;
+  document.getElementById('btnStroke').textContent = '⏸ 停止';
+  document.getElementById('btnStroke').classList.add('active');
+  // 动画期间隐藏静态字，看笔画动画
+  document.getElementById('hz-static').classList.add('hidden');
+
+  hzWriter.animateCharacter({
+    onComplete: function() {
+      var strokes = hzWriter.getStrokeCount ? hzWriter.getStrokeCount() : '';
+      document.getElementById('strokeInfo').textContent = strokes ? strokes + '画' : '';
+      hzAnimating = false;
+      document.getElementById('btnStroke').textContent = '🔄 重播';
+      document.getElementById('btnStroke').classList.remove('active');
+      // 播完恢复静态字
+      document.getElementById('hz-static').classList.remove('hidden');
+    }
+  });
 }
 
 // ============================================================
@@ -918,7 +1047,7 @@ function initGame(fromSaved) {
 
   document.getElementById('resultScreen').classList.remove('show');
   document.getElementById('cardZone').style.display = 'flex';
-  document.getElementById('resumeOverlay').classList.remove('show');
+  var ro = document.getElementById('resumeOverlay'); if (ro) ro.classList.remove('show');
   render();
 }
 
@@ -934,7 +1063,7 @@ function getOrderedChars() {
 }
 
 function render() {
-  const { chars, currentIndex, passSet, failSet, isResult } = state;
+  const { chars, passSet, failSet, isResult } = state;
 
   // 统计（用当前学习队列的总数）
   document.getElementById('passCount').textContent = passSet.size;
@@ -949,23 +1078,30 @@ function render() {
   document.getElementById('progressText').textContent = `${done} / ${leftTotal}`;
 
   // 如果已经全部判完 → 结算
-  if (isResult || currentIndex >= chars.length) {
+  if (isResult || state.currentIndex >= chars.length) {
     showResult();
     return;
   }
 
-  const item = chars[currentIndex];
-
-  // 跳过已判定的字：复习模式/继续学习只跳过已认识，闯关模式两者都跳
+  // 跳过已判定的字（while 循环替代递归，避免栈溢出）
   var skipFailInNormal = state.mode === 'review' || state._continueLearning;
-  if (skipFailInNormal ? passSet.has(item.char) : (passSet.has(item.char) || failSet.has(item.char))) {
-    state.currentIndex++;
-    render();
+  while (state.currentIndex < chars.length) {
+    var item = chars[state.currentIndex];
+    if (skipFailInNormal ? passSet.has(item.char) : (passSet.has(item.char) || failSet.has(item.char))) {
+      state.currentIndex++;
+    } else {
+      break;
+    }
+  }
+  if (state.currentIndex >= chars.length) {
+    showResult();
     return;
   }
 
-  // 显示字（田字格 + 笔画）
-  renderTianzige(item.char);
+  var cur = chars[state.currentIndex];
+
+  // 显示字（田字格）
+  initWriter(cur.char);
   document.getElementById('pinyin').textContent = '';
   document.getElementById('words').textContent = '';
   state.hintVisible = false;
@@ -977,12 +1113,13 @@ function render() {
   updateMicBtn(true, false);
 
   // 按钮
-  document.getElementById('btnRow').innerHTML = `
-    <button class="btn btn-pass" onclick="markPass()">✅ 认识</button>
-    <button class="btn btn-fail" onclick="markFail()">❌ 不会</button>
-    <button class="btn btn-mic btn-sm" id="micBtn" onclick="toggleListen()">${state.autoListen ? '🔁 自动跟读中' : '🎤 跟读'}</button>
-    <button class="btn btn-hint btn-sm" onclick="showHint()">💡 提示</button>
-  `;
+  document.getElementById('btnRow').innerHTML = [
+    '<button class="btn btn-pass" onclick="markPass()">✅ 认识</button>',
+    '<button class="btn btn-fail" onclick="markFail()">❌ 不会</button>',
+    '<button class="btn btn-sm" style="background:#2980b9;color:#fff;" onclick="var c=state.chars[state.currentIndex];if(c)speakChar(c.char,c.pinyin);">🔊 朗读</button>',
+    '<button class="btn btn-mic btn-sm" id="micBtn" onclick="toggleListen()">' + (state.autoListen ? '🔁 自动跟读中' : '🎤 跟读') + '</button>',
+    '<button class="btn btn-hint btn-sm" onclick="showHint()">💡 提示</button>'
+  ].join('');
 
   document.getElementById('cardZone').style.display = 'flex';
   document.getElementById('resultScreen').classList.remove('show');
@@ -1018,12 +1155,14 @@ function showHint() {
   state.hintVisible = true;
   document.getElementById('pinyin').textContent = item.pinyin;
   document.getElementById('words').textContent = '💡 ' + item.word;
+  // 读出这个字
+  speakChar(item.char, item.pinyin);
 }
 
 function showResult() {
   state.isResult = true;
   document.getElementById('cardZone').style.display = 'none';
-  document.getElementById('resumeOverlay').classList.remove('show');
+  var ro = document.getElementById('resumeOverlay'); if (ro) ro.classList.remove('show');
 
   var total = state.chars.length || ALL_CHARS.length;
   var pass = state.passSet.size;
@@ -1067,58 +1206,40 @@ function showResult() {
 }
 
 function setMode(mode) {
+  stopListen();
+  state.autoListen = false;
+  state._continueLearning = false;
   state.mode = mode;
+  state.hintVisible = false;
+  state.isResult = false;
+  state.currentIndex = 0;
+
   document.querySelectorAll('.mode-toggle .btn').forEach(b => b.classList.remove('active'));
-  document.querySelector(`.mode-toggle .btn[data-mode="${mode}"]`).classList.add('active');
+  document.querySelector('.mode-toggle .btn[data-mode="' + mode + '"]').classList.add('active');
 
   if (mode === 'review') {
-    stopListen();
-    state.autoListen = false;
-    state._continueLearning = false;
     // 复习模式：只看错字
-    const wrongArr = Array.from(state.failSet);
+    var wrongArr = Array.from(state.failSet);
     if (wrongArr.length === 0) {
       alert('🎉 没有错字，你太棒了！');
       setMode('normal');
       return;
     }
-    const wrongChars = new Set(wrongArr);
-    state.chars = shuffle(ALL_CHARS.filter(c => wrongChars.has(c.char)));
-    state.shuffledOrder = state.chars.map(c => ALL_CHARS.indexOf(c));
-    state.currentIndex = 0;
-    state.hintVisible = false;
-    state.isResult = false;
-    document.getElementById('resultScreen').classList.remove('show');
-    document.getElementById('cardZone').style.display = 'flex';
-    autoSave();
-    render();
-  } else {
-    stopListen();
-    state.autoListen = false;
-    // 闯关模式：全新打乱完整队列，不受复习模式干扰
-    state.chars = shuffle([...ALL_CHARS]);
+    var wrongChars = new Set(wrongArr);
+    state.chars = ALL_CHARS.filter(function(c) { return wrongChars.has(c.char); });
+    // 复习模式打乱
+    state.chars = shuffle(state.chars);
     state.shuffledOrder = state.chars.map(function(c) { return ALL_CHARS.indexOf(c); });
-    state.currentIndex = 0;
-
-    // 如果所有字都判完了但有不会的，直接变成继续学习不熟的字
-    var totalDone = state.passSet.size + state.failSet.size;
-    var totalChars = state.chars.length || ALL_CHARS.length;
-    if (totalDone >= totalChars && state.failSet.size > 0) {
-      var wrongList = Array.from(state.failSet);
-      var wrongSet = new Set(wrongList);
-      state.chars = shuffle(ALL_CHARS.filter(function(c) { return wrongSet.has(c.char); }));
-      state.shuffledOrder = state.chars.map(function(c) { return ALL_CHARS.indexOf(c); });
-    }
-
-    state.hintVisible = false;
-    state.isResult = false;
-    // 闯关模式对复习序列不跳过 failSet，让用户继续练
-    state._continueLearning = totalDone >= (state.chars.length || ALL_CHARS.length) && state.failSet.size > 0;
-    document.getElementById('resultScreen').classList.remove('show');
-    document.getElementById('cardZone').style.display = 'flex';
-    autoSave();
-    render();
+  } else {
+    // 闯关模式：全新打乱完整队列
+    state.chars = shuffle([].concat(ALL_CHARS));
+    state.shuffledOrder = state.chars.map(function(c) { return ALL_CHARS.indexOf(c); });
   }
+
+  document.getElementById('resultScreen').classList.remove('show');
+  document.getElementById('cardZone').style.display = 'flex';
+  autoSave();
+  render();
 }
 
 function restartAll() {
@@ -1158,9 +1279,45 @@ function reviewWrong() {
 // ============================================================
 var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 var IS_SPEECH_SUPPORTED = !!SpeechRecognition;
+// 语音 API 需要安全上下文：HTTPS 或 localhost
+var IS_SECURE_CTX = window.isSecureContext || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+var IS_SPEECH_USABLE = IS_SPEECH_SUPPORTED && IS_SECURE_CTX;
+var IS_TTS_SUPPORTED = !!window.speechSynthesis;
 var recognition = null;
 var listenAttempts = 0;
 var MAX_LISTEN_ATTEMPTS = 3;
+var ttsVoicesReady = false;
+
+// 预加载 TTS 声音列表
+if (IS_TTS_SUPPORTED) {
+  speechSynthesis.getVoices();
+  speechSynthesis.onvoiceschanged = function() { ttsVoicesReady = true; };
+}
+
+// ============================================================
+//  TTS 朗读（机器读字）
+// ============================================================
+function speakChar(charStr, pinyin) {
+  if (!IS_TTS_SUPPORTED) return;
+  try { speechSynthesis.cancel(); } catch(e) {}
+
+  var u = new SpeechSynthesisUtterance(charStr);
+  u.lang = 'zh-CN';
+  u.rate = 0.7;   // 慢一点，适合小朋友
+  u.pitch = 1.1;
+  u.volume = 0.9;
+
+  // 优先选中文声音
+  var voices = speechSynthesis.getVoices();
+  for (var i = 0; i < voices.length; i++) {
+    if (voices[i].lang.indexOf('zh') === 0) {
+      u.voice = voices[i];
+      break;
+    }
+  }
+
+  speechSynthesis.speak(u);
+}
 
 function setListenStatus(text, className) {
   var el = document.getElementById('listenStatus');
@@ -1175,23 +1332,30 @@ function updateMicBtn(enabled, listening) {
   if (!IS_SPEECH_SUPPORTED) {
     if (btn) {
       btn.className = 'btn btn-mic-unsupported btn-sm';
-      btn.textContent = '\u{1F3A4} \u4E0D\u652F\u6301';
+      btn.textContent = '🎤 不支持';
     }
-    setListenStatus('\u26A0\uFE0F \u8BED\u97F3\u8BC6\u522B\u4E0D\u53EF\u7528\uFF0C\u8BF7\u7528 Chrome', 'result-fail');
+    setListenStatus('⚠️ 语音识别仅支持 Chrome / Edge', 'result-fail');
+    return;
+  }
+  if (!IS_SECURE_CTX) {
+    if (btn) {
+      btn.className = 'btn btn-mic-unsupported btn-sm';
+      btn.textContent = '🔒 不安全';
+    }
+    setListenStatus('⚠️ 语音识别需要 HTTPS 或 localhost 访问', 'result-fail');
     return;
   }
   if (!btn) return;
-  // Always clickable so user can stop anytime
   btn.disabled = false;
   if (listening) {
     btn.classList.add('listening-active');
-    btn.textContent = '\u{1F534} \u8046\u542C\u4E2D...';
+    btn.textContent = '🔴 聆听中...';
   } else if (state.autoListen) {
     btn.classList.remove('listening-active');
-    btn.textContent = '\u{1F501} \u81EA\u52A8\u8DDF\u8BFB\u4E2D';
+    btn.textContent = '🔁 自动跟读中';
   } else {
     btn.classList.remove('listening-active');
-    btn.textContent = '\u{1F3A4} \u8DDF\u8BFB';
+    btn.textContent = '🎤 跟读';
   }
 }
 
@@ -1204,10 +1368,9 @@ function stopListen() {
 }
 
 // Start listening for the current character.
-// After result is processed, advances to next if autoListen is on.
 function startListen() {
-  if (!IS_SPEECH_SUPPORTED) {
-    setListenStatus('\u26A0\uFE0F \u8BF7\u7528 Chrome \u6D4F\u89C8\u5668', 'result-fail');
+  if (!IS_SPEECH_USABLE) {
+    setListenStatus('⚠️ 语音识别不可用', 'result-fail');
     return;
   }
   if (state.isResult) return;
@@ -1217,24 +1380,98 @@ function startListen() {
 
   stopListen();
   listenAttempts = 0;
+  var resultReceived = false;
 
-  if (!recognition) {
-    recognition = new SpeechRecognition();
-    recognition.lang = 'zh-CN';
-    recognition.continuous = false;
-  }
+  recognition = new SpeechRecognition();
+  recognition.lang = 'zh-CN';
+  recognition.continuous = false;
   recognition.interimResults = true;
   recognition.maxAlternatives = 3;
+
+  recognition.onstart = function() {
+    setListenStatus('🎤 正在听...', 'listening');
+    updateMicBtn(true, true);
+  };
+
+  recognition.onspeechstart = function() {
+    setListenStatus('🔊 检测到声音！', 'listening');
+  };
+
+  recognition.onspeechend = function() {
+    setListenStatus('⏳ 识别中...', 'result-wait');
+  };
+
+  recognition.onresult = function(event) {
+    var text = '';
+    var isFinal = false;
+    for (var i = event.resultIndex; i < event.results.length; i++) {
+      text += event.results[i][0].transcript;
+      if (event.results[i].isFinal) isFinal = true;
+    }
+    if (text) {
+      // 显示识别到的文字，方便诊断
+      setListenStatus('👂 听到: 「' + text + '」', isFinal ? 'result-pass' : 'listening');
+    }
+    if (isFinal) {
+      resultReceived = true;
+      processResult(idx, text, null);
+    }
+  };
+
+  recognition.onerror = function(event) {
+    console.log('[HW] Speech error:', event.error);
+    if (event.error === 'no-speech') {
+      setListenStatus('🔇 没听到声音', 'result-fail');
+      processResult(idx, null, 'no-speech');
+      return;
+    }
+    if (event.error === 'aborted') return;
+    if (event.error === 'not-allowed') {
+      setListenStatus('🚫 麦克风权限被拒绝！请检查浏览器设置 → 允许麦克风', 'result-fail');
+      updateMicBtn(true, false);
+      state.autoListen = false;
+      return;
+    }
+    if (event.error === 'audio-capture') {
+      setListenStatus('🔌 找不到麦克风设备', 'result-fail');
+      updateMicBtn(true, false);
+      state.autoListen = false;
+      return;
+    }
+    if (event.error === 'network') {
+      setListenStatus('🌐 语音识别需要网络连接', 'result-fail');
+      updateMicBtn(true, false);
+      state.autoListen = false;
+      return;
+    }
+    processResult(idx, null, event.error);
+  };
+
+  recognition.onend = function() {
+    // 如果 onresult 从未触发 → 完全没检测到语音
+    if (!resultReceived && state.autoListen && !state.isResult && state.currentIndex === idx) {
+      if (listenAttempts === 0) {
+        processResult(idx, null, 'no-speech');
+        return;
+      }
+    }
+    // 自动模式下重试
+    if (state.autoListen && !state.isResult && state.currentIndex === idx && listenAttempts > 0 && listenAttempts < MAX_LISTEN_ATTEMPTS) {
+      clearTimeout(state._autoListenTimer);
+      state._autoListenTimer = setTimeout(function() { startListen(); }, 1200);
+    }
+  };
+
   try {
     recognition.start();
+    setListenStatus('🎤 聆听中，请读字...', 'listening');
+    updateMicBtn(true, true);
   } catch (e) {
+    console.log('[HW] start error:', e);
     state.autoListen = false;
     updateMicBtn(true, false);
-    setListenStatus('\u26A0\uFE0F \u9EA6\u514B\u98CE\u5931\u8D25: ' + e.message, 'result-fail');
-    // \u5931\u8D25\u65F6\u91CD\u5EFA\u5B9E\u4F8B\uff0C\u4E0B\u6B21\u91CD\u8BD5
-    if (e.name === 'InvalidStateError' || e.message.indexOf('already') > -1) {
-      recognition = null;
-    }
+    setListenStatus('⚠️ 麦克风启动失败: ' + (e.message || e), 'result-fail');
+    recognition = null;
   }
 }
 
@@ -1246,9 +1483,9 @@ function processResult(idx, text, failReason) {
   if (text) {
     var clean = text.trim().replace(/[\u3000\u3001\u3002\uFF0C\uFF01\uFF1F\uFF1B\uFF1A\u201C\u201D\u2018\u2019\s\uFEFF\u200B]/g, '');
     if (clean.indexOf(state.chars[idx].char) !== -1) {
-      // Match!
+      // 读对了！
       var matchChar = state.chars[idx].char;
-      setListenStatus('\u2705 \u8BFB\u5BF9\u4E86\uFF01', 'result-pass');
+      setListenStatus('✅ 读对了！（' + matchChar + '）', 'result-pass');
       state.passSet.add(matchChar);
       state.failSet.delete(matchChar);
       state.currentIndex++;
@@ -1258,12 +1495,20 @@ function processResult(idx, text, failReason) {
     }
   }
 
-  // No match or no speech
+  // 没读对或无语音
   listenAttempts++;
+
+  // 还剩1次机会时，自动显示拼音提示
+  if (listenAttempts === MAX_LISTEN_ATTEMPTS - 1) {
+    var hintItem = state.chars[idx];
+    document.getElementById('pinyin').textContent = '🔊 ' + hintItem.pinyin;
+    document.getElementById('words').textContent = '💡 ' + hintItem.word;
+  }
+
   if (listenAttempts >= MAX_LISTEN_ATTEMPTS) {
     var theChar = state.chars[idx].char;
-    var heard = text ? '\u300C' + text.trim() + '\u300D' : '';
-    setListenStatus('\u274C \u8BB0\u4E3A\u4E0D\u8BA4\u8BC6' + (heard ? heard : ''), 'result-fail');
+    var heard = text ? '「' + text.trim() + '」' : '';
+    setListenStatus('❌ 标记为不认识' + (heard ? heard : ''), 'result-fail');
     state.failSet.add(theChar);
     state.passSet.delete(theChar);
     state.currentIndex++;
@@ -1272,9 +1517,9 @@ function processResult(idx, text, failReason) {
   } else {
     var n = MAX_LISTEN_ATTEMPTS - listenAttempts;
     if (text) {
-      setListenStatus('\u{1F914} \u518D\u8BD5\u4E00\u6B21\uFF08\u8FD8\u5269' + n + '\u6B21\uFF09', 'result-fail');
+      setListenStatus('🤔 再试一次（还剩' + n + '次）', 'result-fail');
     } else {
-      setListenStatus('\u{1F507} \u518D\u8BD5\u4E00\u6B21\uFF08\u8FD8\u5269' + n + '\u6B21\uFF09', 'listening');
+      setListenStatus('🔇 未听清，再试一次（还剩' + n + '次）', 'listening');
     }
     if (state.autoListen) {
       clearTimeout(state._autoListenTimer);
@@ -1346,7 +1591,7 @@ function renderFresh(idx) {
   document.getElementById('progressText').textContent = done + ' / ' + total;
 
   var item = chars[idx];
-  renderTianzige(item.char);
+  initWriter(item.char);
   document.getElementById('pinyin').textContent = '';
   document.getElementById('words').textContent = '';
   state.hintVisible = false;
@@ -1357,6 +1602,7 @@ function renderFresh(idx) {
   document.getElementById('btnRow').innerHTML = [
     '<button class="btn btn-pass" onclick="markPass()">\u2705 \u8BA4\u8BC6</button>',
     '<button class="btn btn-fail" onclick="markFail()">\u274C \u4E0D\u4F1A</button>',
+    '<button class="btn btn-sm" style="background:#2980b9;color:#fff;" onclick="var c=state.chars[state.currentIndex];if(c)speakChar(c.char,c.pinyin);">\u{1F50A} \u6717\u8BFB</button>',
     '<button class="btn btn-mic btn-sm" id="micBtn" onclick="toggleListen()">' + (state.autoListen ? '\u{1F501} \u81EA\u52A8\u8DDF\u8BFB\u4E2D' : '\u{1F3A4} \u8DDF\u8BFB') + '</button>',
     '<button class="btn btn-hint btn-sm" onclick="showHint()">\u{1F4A1} \u63D0\u793A</button>'
   ].join('');
@@ -1384,7 +1630,15 @@ function renderAfterMark() {
 }
 
 function toggleListen() {
-  if (!IS_SPEECH_SUPPORTED) return;
+  if (!IS_SPEECH_USABLE) {
+    if (!IS_SPEECH_SUPPORTED) {
+      setListenStatus('⚠️ 语音识别需要 Chrome 或 Edge 浏览器', 'result-fail');
+    } else if (!IS_SECURE_CTX) {
+      setListenStatus('⚠️ 需要用 localhost 或 HTTPS 访问才能使用语音', 'result-fail');
+    }
+    setTimeout(function() { setListenStatus('🔊 点「朗读」按钮可以听发音', 'result-wait'); }, 2500);
+    return;
+  }
 
   // Always stop any active recognition first
   stopListen();
@@ -1393,13 +1647,12 @@ function toggleListen() {
     // Turn OFF
     state.autoListen = false;
     updateMicBtn(true, false);
-    setListenStatus('\u{1F6D1} \u5DF2\u5173\u95ED', 'result-wait');
+    setListenStatus('🎤 已停止跟读', 'result-wait');
   } else {
     // Turn ON
     state.autoListen = true;
     updateMicBtn(true, false);
-    // \u7A0D\u5F85\u786E\u4FDD recognition \u5B8C\u5168\u505C\u6B62\u540E\u518D\u542F\u52A8
-    setTimeout(startListen, 100);
+    setTimeout(startListen, 200);
   }
 }
 
@@ -1421,11 +1674,9 @@ function resumeGame() {
   state.shuffledOrder = state.chars.map(function(c) { return ALL_CHARS.indexOf(c); });
   document.querySelectorAll('.mode-toggle .btn').forEach(function(b) { b.classList.remove('active'); });
   document.querySelector('.mode-toggle .btn[data-mode="' + state.mode + '"]').classList.add('active');
-  document.getElementById('resumeOverlay').classList.remove('show');
+  var ro = document.getElementById('resumeOverlay'); if (ro) ro.classList.remove('show');
   document.getElementById('cardZone').style.display = 'flex';
   render();
-}
-
 }
 
 function clearAndStart() {
