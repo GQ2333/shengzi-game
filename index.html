@@ -465,8 +465,8 @@
       </svg>
       <!-- HanziWriter 动画层 -->
       <div id="hz-container" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:2;"></div>
-      <!-- 静态楷体字层（最上层） -->
-      <div id="hz-static" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-family:'KaiTi','STKaiti','楷体',serif;font-size:110px;font-weight:400;color:#3e2723;z-index:3;pointer-events:none;transition:opacity 0.15s;"></div>
+      <!-- 静态楷体字层（最上层，白底遮住 HanziWriter） -->
+      <div id="hz-static" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-family:'KaiTi','STKaiti','楷体',serif;font-size:110px;font-weight:400;color:#3e2723;background:#fffef7;z-index:3;pointer-events:none;transition:opacity 0.15s;"></div>
     </div>
     <div class="stroke-controls">
       <button class="btn-stroke" id="btnStroke" onclick="toggleStrokeAnim()">✍️ 笔画顺序</button>
@@ -1306,43 +1306,46 @@ if (IS_TTS_SUPPORTED) {
 // ============================================================
 //  TTS 朗读（机器读字）
 // ============================================================
-var _ttsUtterance = null;  // 防止 GC 回收
+var _ttsUtterance = null;
 
 function speakChar(charStr, pinyin) {
-  if (!IS_TTS_SUPPORTED) return;
+  if (!IS_TTS_SUPPORTED) {
+    console.log('[TTS] speechSynthesis not supported');
+    return;
+  }
 
-  // 先取消之前的朗读
+  // 停止之前的朗读
   try { speechSynthesis.cancel(); } catch(e) {}
 
-  var u = new SpeechSynthesisUtterance(charStr);
-  u.lang = 'zh-CN';
-  u.rate = 0.7;
-  u.pitch = 1.1;
-  u.volume = 1.0;
+  // 等一帧确保 cancel 生效
+  setTimeout(function() {
+    try {
+      var u = new SpeechSynthesisUtterance(charStr);
+      u.lang = 'zh-CN';
+      u.rate = 0.65;
+      u.pitch = 1.05;
+      u.volume = 1.0;
 
-  // 获取中文声音（voices 可能异步加载，重试一次）
-  var voices = speechSynthesis.getVoices();
-  var zhVoice = null;
-  for (var i = 0; i < voices.length; i++) {
-    if (voices[i].lang.indexOf('zh') === 0) {
-      zhVoice = voices[i];
-      break;
+      // 尝试选中文声音
+      var voices = speechSynthesis.getVoices();
+      for (var i = 0; i < voices.length; i++) {
+        if (voices[i].lang.indexOf('zh') === 0 || voices[i].lang.indexOf('yue') === 0) {
+          u.voice = voices[i];
+          break;
+        }
+      }
+
+      // 调试
+      u.onstart = function() { console.log('[TTS] started:', charStr); };
+      u.onend = function() { console.log('[TTS] ended:', charStr); };
+      u.onerror = function(e) { console.log('[TTS] error:', e.error, charStr); };
+
+      _ttsUtterance = u;
+      speechSynthesis.speak(u);
+    } catch(e) {
+      console.log('[TTS] failed:', e);
     }
-  }
-
-  if (zhVoice) {
-    u.voice = zhVoice;
-  } else if (voices.length === 0) {
-    // voices 还没加载完成，延迟重试
-    speechSynthesis.onvoiceschanged = function() {
-      speechSynthesis.onvoiceschanged = null;
-      speakChar(charStr, pinyin);
-    };
-    // 没有 voice 也能读，继续
-  }
-
-  _ttsUtterance = u;
-  speechSynthesis.speak(u);
+  }, 50);
 }
 
 function setListenStatus(text, className) {
@@ -1725,6 +1728,14 @@ function checkSavedData() {
 // ============================================================
 //  启动
 // ============================================================
+// TTS 预热（某些浏览器首次 speak 会静默）
+if (IS_TTS_SUPPORTED) {
+  var _warm = new SpeechSynthesisUtterance('');
+  _warm.volume = 0;
+  _warm.rate = 2;
+  speechSynthesis.speak(_warm);
+}
+
 checkSavedData();
 </script>
 </body>
