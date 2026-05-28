@@ -1289,7 +1289,7 @@ function updateMicBtn(enabled, listening) {
       btn.className = 'btn btn-mic-unsupported btn-sm';
       btn.textContent = '🎤 不支持';
     }
-    setListenStatus('⚠️ 语音识别仅支持 Chrome / Edge', 'result-fail');
+    setListenStatus('⚠️ 语音识别仅支持 Chrome/Edge（国内需用 Edge）', 'result-fail');
     return;
   }
   if (!IS_SECURE_CTX) {
@@ -1394,7 +1394,7 @@ function startListen() {
       return;
     }
     if (event.error === 'network') {
-      setListenStatus('🌐 语音识别需要网络连接', 'result-fail');
+      setListenStatus('🌐 语音识别被墙（Google服务不可用），试试 Edge 浏览器', 'result-fail');
       updateMicBtn(true, false);
       state.autoListen = false;
       return;
