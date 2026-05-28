@@ -453,10 +453,18 @@
   <!-- ====== 卡片 ====== -->
   <div class="card-zone" id="cardZone">
     <div id="hz-wrapper" style="position:relative;width:220px;height:220px;margin:0 auto 12px;">
-      <!-- HanziWriter 田字格 + 动画层 -->
-      <div id="hz-container" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;"></div>
-      <!-- 静态楷体字（透明背景，叠加在田字格上） -->
-      <div id="hz-static" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-family:'KaiTi','STKaiti','楷体',serif;font-size:110px;font-weight:400;color:#2c1810;z-index:2;pointer-events:none;transition:opacity 0.15s;"></div>
+      <!-- 田字格 SVG 背景（始终可见） -->
+      <svg id="hz-grid" viewBox="0 0 220 220" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;pointer-events:none;">
+        <rect x="1" y="1" width="218" height="218" fill="#fffef7" stroke="#e67e22" stroke-width="2" rx="3"/>
+        <line x1="110" y1="0" x2="110" y2="220" stroke="#d35400" stroke-width="0.8" stroke-dasharray="5,4" opacity="0.45"/>
+        <line x1="0" y1="110" x2="220" y2="110" stroke="#d35400" stroke-width="0.8" stroke-dasharray="5,4" opacity="0.45"/>
+        <line x1="0" y1="0" x2="220" y2="220" stroke="#e8a87c" stroke-width="0.5" stroke-dasharray="4,5" opacity="0.3"/>
+        <line x1="220" y1="0" x2="0" y2="220" stroke="#e8a87c" stroke-width="0.5" stroke-dasharray="4,5" opacity="0.3"/>
+      </svg>
+      <!-- HanziWriter 动画层（只用于笔画动画） -->
+      <div id="hz-container" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:2;"></div>
+      <!-- 静态楷体字（透明，叠加在田字格上） -->
+      <div id="hz-static" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-family:'KaiTi','STKaiti','楷体',serif;font-size:110px;font-weight:400;color:#2c1810;z-index:3;pointer-events:none;transition:opacity 0.15s;"></div>
     </div>
     <div class="stroke-controls">
       <button class="btn-stroke" id="btnStroke" onclick="toggleStrokeAnim()">✍️ 笔画顺序</button>
@@ -937,8 +945,11 @@ function toggleStrokeAnim() {
       hzAnimating = false;
       document.getElementById('btnStroke').textContent = '🔄 重播';
       document.getElementById('btnStroke').classList.remove('active');
-      // 播完恢复静态字
-      document.getElementById('hz-static').classList.remove('hidden');
+      // 延迟后隐藏笔画，恢复静态字
+      setTimeout(function() {
+        try { hzWriter.hideCharacter(); } catch(e) {}
+        document.getElementById('hz-static').classList.remove('hidden');
+      }, 1500);
     }
   });
 }
