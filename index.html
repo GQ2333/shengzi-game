@@ -1121,7 +1121,6 @@ function render() {
   document.getElementById('btnRow').innerHTML = [
     '<button class="btn btn-pass" onclick="markPass()">✅ 认识</button>',
     '<button class="btn btn-fail" onclick="markFail()">❌ 不会</button>',
-    '<button class="btn btn-sm" style="background:#2980b9;color:#fff;" onclick="var c=state.chars[state.currentIndex];if(c)speakChar(c.char,c.pinyin);">🔊 朗读</button>',
     '<button class="btn btn-mic btn-sm" id="micBtn" onclick="toggleListen()">' + (state.autoListen ? '🔁 自动跟读中' : '🎤 跟读') + '</button>',
     '<button class="btn btn-hint btn-sm" onclick="showHint()">💡 提示</button>'
   ].join('');
@@ -1160,8 +1159,6 @@ function showHint() {
   state.hintVisible = true;
   document.getElementById('pinyin').textContent = item.pinyin;
   document.getElementById('words').textContent = '💡 ' + item.word;
-  // 读出这个字
-  speakChar(item.char, item.pinyin);
 }
 
 function showResult() {
@@ -1269,82 +1266,13 @@ var IS_SPEECH_SUPPORTED = !!SpeechRecognition;
 // 语音 API 需要安全上下文：HTTPS 或 localhost
 var IS_SECURE_CTX = window.isSecureContext || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 var IS_SPEECH_USABLE = IS_SPEECH_SUPPORTED && IS_SECURE_CTX;
-var IS_TTS_SUPPORTED = !!window.speechSynthesis;
 var recognition = null;
 var listenAttempts = 0;
 var MAX_LISTEN_ATTEMPTS = 3;
-var ttsVoicesReady = false;
 
-// 预加载 TTS 声音列表
-if (IS_TTS_SUPPORTED) {
-  speechSynthesis.getVoices();
-  speechSynthesis.onvoiceschanged = function() { ttsVoicesReady = true; };
-}
 
 // ============================================================
-//  TTS 朗读（机器读字）
-// ============================================================
-var _ttsUtterance = null;
 
-function speakChar(charStr, pinyin) {
-  if (!IS_TTS_SUPPORTED) {
-    // TTS 不可用，用备用音频方案
-    fallbackSpeak(charStr);
-    return;
-  }
-
-  // 停止之前的朗读
-  try { speechSynthesis.cancel(); } catch(e) {}
-
-  try {
-    var u = new SpeechSynthesisUtterance(charStr);
-    u.lang = 'zh-CN';
-    u.rate = 0.65;
-    u.pitch = 1.05;
-    u.volume = 1.0;
-
-    // 尝试选中文声音
-    var voices = speechSynthesis.getVoices();
-    for (var i = 0; i < voices.length; i++) {
-      if (voices[i].lang.indexOf('zh') === 0 || voices[i].lang.indexOf('yue') === 0) {
-        u.voice = voices[i];
-        break;
-      }
-    }
-
-    u.onstart = function() { console.log('[TTS] started:', charStr); };
-    u.onend = function() { console.log('[TTS] ended:', charStr); };
-    u.onerror = function(e) {
-      console.log('[TTS] error:', e.error, charStr);
-      // TTS 失败时用备用方案
-      fallbackSpeak(charStr);
-    };
-
-    _ttsUtterance = u;
-    speechSynthesis.speak(u);
-  } catch(e) {
-    console.log('[TTS] failed:', e);
-    fallbackSpeak(charStr);
-  }
-}
-
-// 备用方案：使用 Google TTS 音频（在 TTS API 不可用时）
-function fallbackSpeak(charStr) {
-  try {
-    // 清理旧的备用音频
-    var old = document.getElementById('tts-fallback-audio');
-    if (old) old.remove();
-
-    var audio = document.createElement('audio');
-    audio.id = 'tts-fallback-audio';
-    audio.src = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=zh-CN&q=' + encodeURIComponent(charStr);
-    audio.play().catch(function() {
-      console.log('[TTS] fallback audio also failed');
-    });
-  } catch(e) {
-    console.log('[TTS] fallback error:', e);
-  }
-}
 
 function setListenStatus(text, className) {
   var el = document.getElementById('listenStatus');
@@ -1629,7 +1557,6 @@ function renderFresh(idx) {
   document.getElementById('btnRow').innerHTML = [
     '<button class="btn btn-pass" onclick="markPass()">\u2705 \u8BA4\u8BC6</button>',
     '<button class="btn btn-fail" onclick="markFail()">\u274C \u4E0D\u4F1A</button>',
-    '<button class="btn btn-sm" style="background:#2980b9;color:#fff;" onclick="var c=state.chars[state.currentIndex];if(c)speakChar(c.char,c.pinyin);">\u{1F50A} \u6717\u8BFB</button>',
     '<button class="btn btn-mic btn-sm" id="micBtn" onclick="toggleListen()">' + (state.autoListen ? '\u{1F501} \u81EA\u52A8\u8DDF\u8BFB\u4E2D' : '\u{1F3A4} \u8DDF\u8BFB') + '</button>',
     '<button class="btn btn-hint btn-sm" onclick="showHint()">\u{1F4A1} \u63D0\u793A</button>'
   ].join('');
@@ -1663,7 +1590,7 @@ function toggleListen() {
     } else if (!IS_SECURE_CTX) {
       setListenStatus('⚠️ 需要用 localhost 或 HTTPS 访问才能使用语音', 'result-fail');
     }
-    setTimeout(function() { setListenStatus('🔊 点「朗读」按钮可以听发音', 'result-wait'); }, 2500);
+    setTimeout(function() { setListenStatus('🎤 点跟读按钮开始', 'result-wait'); }, 2500);
     return;
   }
 
@@ -1733,13 +1660,6 @@ function checkSavedData() {
 // ============================================================
 //  启动
 // ============================================================
-// TTS 预热（某些浏览器首次 speak 会静默）
-if (IS_TTS_SUPPORTED) {
-  var _warm = new SpeechSynthesisUtterance('');
-  _warm.volume = 0;
-  _warm.rate = 2;
-  speechSynthesis.speak(_warm);
-}
 
 checkSavedData();
 </script>
