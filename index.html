@@ -1413,7 +1413,7 @@ function startListen() {
     // 自动模式下重试
     if (state.autoListen && !state.isResult && state.currentIndex === idx && listenAttempts > 0 && listenAttempts < MAX_LISTEN_ATTEMPTS) {
       clearTimeout(state._autoListenTimer);
-      state._autoListenTimer = setTimeout(function() { startListen(); }, 1200);
+      state._autoListenTimer = setTimeout(function() { startListen(); }, 600);
     }
   };
 
@@ -1445,7 +1445,7 @@ function processResult(idx, text, failReason) {
       state.failSet.delete(matchChar);
       state.currentIndex++;
       autoSave();
-      scheduleNext(500);
+      scheduleNext(150);
       return;
     }
   }
@@ -1468,7 +1468,7 @@ function processResult(idx, text, failReason) {
     state.passSet.delete(theChar);
     state.currentIndex++;
     autoSave();
-    scheduleNext(800);
+    scheduleNext(300);
   } else {
     var n = MAX_LISTEN_ATTEMPTS - listenAttempts;
     if (text) {
@@ -1478,7 +1478,7 @@ function processResult(idx, text, failReason) {
     }
     if (state.autoListen) {
       clearTimeout(state._autoListenTimer);
-      state._autoListenTimer = setTimeout(function() { startListen(); }, 1200);
+      state._autoListenTimer = setTimeout(function() { startListen(); }, 600);
     } else {
       updateMicBtn(true, false);
     }
@@ -1500,7 +1500,7 @@ function scheduleNext(delay) {
       return;
     }
     renderNextAndListen();
-  }, delay + 200);
+  }, delay + 80);
 }
 
 function renderNextAndListen() {
@@ -1606,7 +1606,7 @@ function toggleListen() {
     // Turn ON
     state.autoListen = true;
     updateMicBtn(true, false);
-    setTimeout(startListen, 200);
+    setTimeout(startListen, 80);
   }
 }
 
