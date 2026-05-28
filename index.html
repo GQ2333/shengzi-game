@@ -4,7 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>🦐 小钳仙 · 生字闯关</title>
-<script src="https://cdn.jsdelivr.net/npm/hanzi-writer@2.4/dist/hanzi-writer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5/dist/hanzi-writer.min.js"></script>
+<script>
+// 检查 hanzi-writer 是否加载成功，失败则用文字回退
+window.addEventListener('error', function(e) {
+  if (e.target && e.target.src && e.target.src.indexOf('hanzi-writer') > -1) {
+    window.HANZI_WRITER_FAILED = true;
+  }
+}, true);
+</script>
 <style>
   /* ========== 全局 ========== */
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -374,6 +382,9 @@
   height: 200px;
   margin: 0 auto;
   position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 .char-canvas svg {
   width: 100% !important;
@@ -974,6 +985,23 @@ function initHanziWriter(charStr) {
   if (!container) return;
   container.innerHTML = '';
   hwCurrentChar = charStr;
+  // 先画一个田字格背景
+  var bgHtml = '<svg width="200" height="200" viewBox="0 0 200 200" style="position:absolute;top:0;left:50%;margin-left:-100px;pointer-events:none">';
+  bgHtml += '<rect x="0" y="0" width="200" height="200" fill="#fffef7" stroke="#ccc" stroke-width="1"/>';
+  bgHtml += '<line x1="100" y1="0" x2="100" y2="200" stroke="#ccc" stroke-width="0.5" stroke-dasharray="3,3"/>';
+  bgHtml += '<line x1="0" y1="100" x2="200" y2="100" stroke="#ccc" stroke-width="0.5" stroke-dasharray="3,3"/>';
+  bgHtml += '<line x1="0" y1="0" x2="200" y2="200" stroke="#eee" stroke-width="0.3" stroke-dasharray="2,2"/>';
+  bgHtml += '<line x1="200" y1="0" x2="0" y2="200" stroke="#eee" stroke-width="0.3" stroke-dasharray="2,2"/>';
+  bgHtml += '</svg>';
+  container.innerHTML = bgHtml;
+  
+  if (typeof HanziWriter === 'undefined' || window.HANZI_WRITER_FAILED) {
+    // CDN 加载失败，回退文字
+    container.innerHTML += '<div style="font-size:100px;text-align:center;color:#3e2723;padding-top:20px;position:relative;z-index:1">' + charStr + '</div>';
+    hwWriter = null;
+    return;
+  }
+  
   try {
     hwWriter = HanziWriter.create('charCanvas', charStr, {
       width: 200,
@@ -987,8 +1015,12 @@ function initHanziWriter(charStr) {
       showOutline: true,
       showCharacter: true,
     });
+    // 自动播放笔画动画
+    setTimeout(function() {
+      if (hwWriter) hwWriter.animateCharacter();
+    }, 300);
   } catch(e) {
-    container.innerHTML = '<div style="font-size:100px;text-align:center;color:#3e2723;padding-top:30px">' + charStr + '</div>';
+    container.innerHTML += '<div style="font-size:100px;text-align:center;color:#3e2723;padding-top:20px;position:relative;z-index:1">' + charStr + '</div>';
     hwWriter = null;
   }
 }
