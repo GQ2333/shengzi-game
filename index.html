@@ -370,11 +370,11 @@
   }
 
 
-/* ========== Hanzi Writer 双层显示 ========== */
+/* ========== Hanzi Writer 双层显示 + 田字格 ========== */
 #hz-wrapper {
   position: relative;
-  width: 200px;
-  height: 200px;
+  width: 220px;
+  height: 220px;
   margin: 0 auto 12px;
 }
 #hz-static {
@@ -382,9 +382,6 @@
 }
 #hz-static.hidden {
   opacity: 0;
-}
-#hz-container {
-  pointer-events: none;
 }
 .stroke-controls {
   display: flex;
@@ -455,9 +452,21 @@
 
   <!-- ====== 卡片 ====== -->
   <div class="card-zone" id="cardZone">
-    <div id="hz-wrapper" style="position:relative;width:200px;height:200px;margin:0 auto 12px;">
-      <div id="hz-static" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:100px;font-weight:700;color:#3e2723;border:2px solid #f0c9a3;border-radius:12px;background:#fffef7;z-index:2;pointer-events:none;"></div>
-      <div id="hz-container" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;"></div>
+    <div id="hz-wrapper" style="position:relative;width:220px;height:220px;margin:0 auto 12px;">
+      <!-- 田字格背景（始终可见） -->
+      <svg id="hz-grid" viewBox="0 0 220 220" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;">
+        <rect x="1" y="1" width="218" height="218" fill="#fffef7" stroke="#e67e22" stroke-width="2" rx="4"/>
+        <!-- 虚线十字 -->
+        <line x1="110" y1="0" x2="110" y2="220" stroke="#d35400" stroke-width="0.8" stroke-dasharray="5,4" opacity="0.5"/>
+        <line x1="0" y1="110" x2="220" y2="110" stroke="#d35400" stroke-width="0.8" stroke-dasharray="5,4" opacity="0.5"/>
+        <!-- 虚线对角线 -->
+        <line x1="0" y1="0" x2="220" y2="220" stroke="#e8a87c" stroke-width="0.5" stroke-dasharray="4,5" opacity="0.4"/>
+        <line x1="220" y1="0" x2="0" y2="220" stroke="#e8a87c" stroke-width="0.5" stroke-dasharray="4,5" opacity="0.4"/>
+      </svg>
+      <!-- HanziWriter 动画层 -->
+      <div id="hz-container" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:2;"></div>
+      <!-- 静态楷体字层（最上层） -->
+      <div id="hz-static" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-family:'KaiTi','STKaiti','楷体',serif;font-size:110px;font-weight:400;color:#3e2723;z-index:3;pointer-events:none;transition:opacity 0.15s;"></div>
     </div>
     <div class="stroke-controls">
       <button class="btn-stroke" id="btnStroke" onclick="toggleStrokeAnim()">✍️ 笔画顺序</button>
@@ -873,8 +882,8 @@ function initWriter(charStr) {
   // 创建 HanziWriter（在静态层下方加载笔画数据）
   try {
     hzWriter = HanziWriter.create('hz-container', charStr, {
-      width: 200,
-      height: 200,
+      width: 220,
+      height: 220,
       padding: 5,
       strokeAnimationSpeed: 1.2,
       delayBetweenStrokes: 600,
@@ -1297,25 +1306,42 @@ if (IS_TTS_SUPPORTED) {
 // ============================================================
 //  TTS 朗读（机器读字）
 // ============================================================
+var _ttsUtterance = null;  // 防止 GC 回收
+
 function speakChar(charStr, pinyin) {
   if (!IS_TTS_SUPPORTED) return;
+
+  // 先取消之前的朗读
   try { speechSynthesis.cancel(); } catch(e) {}
 
   var u = new SpeechSynthesisUtterance(charStr);
   u.lang = 'zh-CN';
-  u.rate = 0.7;   // 慢一点，适合小朋友
+  u.rate = 0.7;
   u.pitch = 1.1;
-  u.volume = 0.9;
+  u.volume = 1.0;
 
-  // 优先选中文声音
+  // 获取中文声音（voices 可能异步加载，重试一次）
   var voices = speechSynthesis.getVoices();
+  var zhVoice = null;
   for (var i = 0; i < voices.length; i++) {
     if (voices[i].lang.indexOf('zh') === 0) {
-      u.voice = voices[i];
+      zhVoice = voices[i];
       break;
     }
   }
 
+  if (zhVoice) {
+    u.voice = zhVoice;
+  } else if (voices.length === 0) {
+    // voices 还没加载完成，延迟重试
+    speechSynthesis.onvoiceschanged = function() {
+      speechSynthesis.onvoiceschanged = null;
+      speakChar(charStr, pinyin);
+    };
+    // 没有 voice 也能读，继续
+  }
+
+  _ttsUtterance = u;
   speechSynthesis.speak(u);
 }
 
