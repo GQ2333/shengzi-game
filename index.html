@@ -1232,6 +1232,10 @@ function startListen() {
     state.autoListen = false;
     updateMicBtn(true, false);
     setListenStatus('\u26A0\uFE0F \u9EA6\u514B\u98CE\u5931\u8D25: ' + e.message, 'result-fail');
+    // \u5931\u8D25\u65F6\u91CD\u5EFA\u5B9E\u4F8B\uff0C\u4E0B\u6B21\u91CD\u8BD5
+    if (e.name === 'InvalidStateError' || e.message.indexOf('already') > -1) {
+      recognition = null;
+    }
   }
 }
 
