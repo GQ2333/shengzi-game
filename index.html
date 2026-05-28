@@ -430,20 +430,6 @@
     </div>
   </div>
 
-  <!-- ====== 继续/重置遮罩 ====== -->
-  <div class="resume-overlay" id="resumeOverlay">
-    <div class="icon">🦐</div>
-    <h2>📖 上次看到一半啦！</h2>
-    <p id="resumeInfo">你已经认识了 <strong>0</strong> 个字，还有 <strong>0</strong> 个不会</p>
-    <div class="progress-mini">
-      <div class="progress-mini-fill" id="resumeProgressFill" style="width:0%"></div>
-    </div>
-    <div class="btn-row" style="margin-top:8px">
-      <button class="btn btn-pass" onclick="resumeGame()">▶️ 继续闯关</button>
-      <button class="btn btn-danger btn-sm" onclick="clearAndStart()">🆕 重新开始</button>
-    </div>
-  </div>
-
   <!-- ====== 保存提示 ====== -->
   <div class="save-toast" id="saveToast">💾 已自动保存</div>
 
@@ -1185,7 +1171,6 @@ function updateMicBtn(enabled, listening) {
 function stopListen() {
   if (recognition) {
     try { recognition.abort(); } catch(e) {}
-    recognition = null;
   }
   clearTimeout(state._autoListenTimer);
   state._autoListenTimer = null;
@@ -1206,49 +1191,13 @@ function startListen() {
   stopListen();
   listenAttempts = 0;
 
-  recognition = new SpeechRecognition();
-  recognition.lang = 'zh-CN';
-  recognition.continuous = false;
+  if (!recognition) {
+    recognition = new SpeechRecognition();
+    recognition.lang = 'zh-CN';
+    recognition.continuous = false;
+  }
   recognition.interimResults = true;
   recognition.maxAlternatives = 3;
-
-  updateMicBtn(false, true);
-  setListenStatus('\u{1F3A4} \u8BF7\u5927\u58F0\u8BFB\u51FA\u8FD9\u4E2A\u5B57...', 'listening');
-
-  var finalTranscript = '';
-  var done = false;
-  var selfIdx = idx; // capture current char index
-
-  recognition.onresult = function(event) {
-    for (var i = event.resultIndex; i < event.results.length; i++) {
-      var r = event.results[i];
-      if (r.isFinal) {
-        finalTranscript += r[0].transcript;
-      }
-    }
-    if (finalTranscript) {
-      setListenStatus('\u{1F3A4} \u542C\u5230: \u300C' + finalTranscript + '\u300D', 'listening');
-    }
-  };
-
-  recognition.onerror = function(event) {
-    if (done) return;
-    done = true;
-    if (event.error === 'not-allowed') {
-      state.autoListen = false;
-      updateMicBtn(true, false);
-      setListenStatus('\u26A0\uFE0F \u8BF7\u5141\u8BB8\u9EA6\u514B\u98CE', 'result-fail');
-    } else {
-      processResult(selfIdx, null, '\u5FAE\u97E2\u5931\u8D25');
-    }
-  };
-
-  recognition.onend = function() {
-    if (done) return;
-    done = true;
-    processResult(selfIdx, finalTranscript, '\u6CA1\u542C\u5230');
-  };
-
   try {
     recognition.start();
   } catch (e) {
@@ -1370,7 +1319,7 @@ function renderFresh(idx) {
   document.getElementById('progressText').textContent = done + ' / ' + total;
 
   var item = chars[idx];
-  document.getElementById('mainChar').textContent = item.char;
+  renderTianzige(item.char);
   document.getElementById('pinyin').textContent = '';
   document.getElementById('words').textContent = '';
   state.hintVisible = false;
@@ -1422,7 +1371,8 @@ function toggleListen() {
     // Turn ON
     state.autoListen = true;
     updateMicBtn(true, false);
-    startListen();
+    // \u7A0D\u5F85\u786E\u4FDD recognition \u5B8C\u5168\u505C\u6B62\u540E\u518D\u542F\u52A8
+    setTimeout(startListen, 100);
   }
 }
 
@@ -1461,31 +1411,10 @@ function clearAndStart() {
 function checkSavedData() {
   const saved = loadSavedState();
   if (saved) {
-    const pass = (saved.passList || []).length;
-    const fail = (saved.failList || []).length;
-    const total = ALL_CHARS.length;
-    const done = pass + fail;
-
-    document.getElementById('resumeInfo').innerHTML =
-      `你已经认识了 <strong>${pass}</strong> 个字，` +
-      `还有 <strong>${fail}</strong> 个不会`;
-
-    document.getElementById('resumeProgressFill').style.width =
-      total > 0 ? (done / total * 100) + '%' : '0%';
-
-    if (done >= total) {
-      state.passSet = new Set(saved.passList || []);
-      state.failSet = new Set(saved.failList || []);
-      state.chars = [];
-      state.currentIndex = 0;
-      showResult();
-      return;
-    }
-
-    document.getElementById('resumeOverlay').classList.add('show');
+    // 恢复进度直接继续
+    resumeGame();
     return;
   }
-  // 无存档 → 直接开始游戏
   initGame(false);
 }
 
