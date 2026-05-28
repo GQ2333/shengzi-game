@@ -1288,42 +1288,62 @@ var _ttsUtterance = null;
 
 function speakChar(charStr, pinyin) {
   if (!IS_TTS_SUPPORTED) {
-    console.log('[TTS] speechSynthesis not supported');
+    // TTS 不可用，用备用音频方案
+    fallbackSpeak(charStr);
     return;
   }
 
   // 停止之前的朗读
   try { speechSynthesis.cancel(); } catch(e) {}
 
-  // 等一帧确保 cancel 生效
-  setTimeout(function() {
-    try {
-      var u = new SpeechSynthesisUtterance(charStr);
-      u.lang = 'zh-CN';
-      u.rate = 0.65;
-      u.pitch = 1.05;
-      u.volume = 1.0;
+  try {
+    var u = new SpeechSynthesisUtterance(charStr);
+    u.lang = 'zh-CN';
+    u.rate = 0.65;
+    u.pitch = 1.05;
+    u.volume = 1.0;
 
-      // 尝试选中文声音
-      var voices = speechSynthesis.getVoices();
-      for (var i = 0; i < voices.length; i++) {
-        if (voices[i].lang.indexOf('zh') === 0 || voices[i].lang.indexOf('yue') === 0) {
-          u.voice = voices[i];
-          break;
-        }
+    // 尝试选中文声音
+    var voices = speechSynthesis.getVoices();
+    for (var i = 0; i < voices.length; i++) {
+      if (voices[i].lang.indexOf('zh') === 0 || voices[i].lang.indexOf('yue') === 0) {
+        u.voice = voices[i];
+        break;
       }
-
-      // 调试
-      u.onstart = function() { console.log('[TTS] started:', charStr); };
-      u.onend = function() { console.log('[TTS] ended:', charStr); };
-      u.onerror = function(e) { console.log('[TTS] error:', e.error, charStr); };
-
-      _ttsUtterance = u;
-      speechSynthesis.speak(u);
-    } catch(e) {
-      console.log('[TTS] failed:', e);
     }
-  }, 50);
+
+    u.onstart = function() { console.log('[TTS] started:', charStr); };
+    u.onend = function() { console.log('[TTS] ended:', charStr); };
+    u.onerror = function(e) {
+      console.log('[TTS] error:', e.error, charStr);
+      // TTS 失败时用备用方案
+      fallbackSpeak(charStr);
+    };
+
+    _ttsUtterance = u;
+    speechSynthesis.speak(u);
+  } catch(e) {
+    console.log('[TTS] failed:', e);
+    fallbackSpeak(charStr);
+  }
+}
+
+// 备用方案：使用 Google TTS 音频（在 TTS API 不可用时）
+function fallbackSpeak(charStr) {
+  try {
+    // 清理旧的备用音频
+    var old = document.getElementById('tts-fallback-audio');
+    if (old) old.remove();
+
+    var audio = document.createElement('audio');
+    audio.id = 'tts-fallback-audio';
+    audio.src = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=zh-CN&q=' + encodeURIComponent(charStr);
+    audio.play().catch(function() {
+      console.log('[TTS] fallback audio also failed');
+    });
+  } catch(e) {
+    console.log('[TTS] fallback error:', e);
+  }
 }
 
 function setListenStatus(text, className) {
